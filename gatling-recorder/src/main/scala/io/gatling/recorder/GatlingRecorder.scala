@@ -38,6 +38,7 @@ object GatlingRecorder {
     opt[Boolean](FollowRedirect).foreach(props.followRedirect).text("""Sets the "Follow Redirects" option to true""")
     opt[Boolean](AutomaticReferer).foreach(props.automaticReferer).text("""Sets the "Automatic Referers" option to true""")
     opt[Boolean](InferHtmlResources).foreach(props.inferHtmlResources).text("""Sets the "Fetch html resources" option to true""")
+    opt[Boolean](Headless).foreach(props.runHeadless).text("""Runs the recorder in headless mode""")
   }
 
   def main(args: Array[String]): Unit = {

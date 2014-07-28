@@ -15,102 +15,77 @@
  */
 package io.gatling.http.request
 
+import org.mockito.Mockito._
+import org.scalatest.{ FlatSpec, Matchers }
+import org.scalatest.mock.MockitoSugar
+
+import com.ning.http.client.Request
 import com.ning.http.client.uri.UriComponents
+
 import io.gatling.core.config.GatlingConfiguration
 import io.gatling.http.config.{ HttpProtocolBuilder, HttpProtocol }
 import io.gatling.core.session._
 import io.gatling.http.ahc.HttpEngine
 import io.gatling.http.cache.PermanentRedirect
 
-import org.junit.runner.RunWith
-import org.specs2.runner.JUnitRunner
-import org.specs2.mutable.{ Before, Specification }
-import org.specs2.mock.Mockito
+class HttpRequestDefSpec extends FlatSpec with Matchers with MockitoSugar {
 
-import com.ning.http.client.Request
+  GatlingConfiguration.setUpForTest()
 
-/**
- * @author Ivan Mushketyk
- */
-@RunWith(classOf[JUnitRunner])
-class HttpRequestDefSpec extends Specification with Mockito {
-
-  GatlingConfiguration.setUp()
-
-  trait Context extends Before {
+  trait Context {
     val httpEngineMock = mock[HttpEngine]
     var session = Session("mockSession", "mockUserName")
+    val configBase = HttpRequestConfig(
+      checks = Nil,
+      responseTransformer = None,
+      extraInfoExtractor = None,
+      maxRedirects = None,
+      throttled = false,
+      silent = false,
+      followRedirect = false,
+      discardResponseChunks = true,
+      protocol = HttpProtocol.DefaultHttpProtocol,
+      explicitResources = Nil)
 
     def addRedirect(from: String, to: String): Unit =
       session = PermanentRedirect.addRedirect(session, UriComponents.create(from), UriComponents.create(to))
 
-    def before(): Unit = {}
   }
 
-  "HttpRequestDef" should {
+  "HttpRequestDef" should "build silent HttpRequest when being silent" in new Context {
+    val config = configBase.copy(silent = true)
 
-    "build silent HttpRequest when being silent" in new Context {
-      val config = HttpRequestConfig(
-        checks = Nil,
-        responseTransformer = None,
-        extraInfoExtractor = None,
-        maxRedirects = None,
-        throttled = false,
-        silent = true, // here
-        followRedirect = false,
-        protocol = HttpProtocol.DefaultHttpProtocol,
-        explicitResources = Nil)
+    val ahcRequest = mock[Request]
+    when(ahcRequest.getURI) thenReturn UriComponents.create("http://example.com/")
 
-      val ahcRequest = mock[Request]
-      ahcRequest.getURI returns UriComponents.create("http://example.com/")
+    val httpRequestDef = HttpRequestDef("foo".expression, ahcRequest.expression, None, config)
+    val httpRequest = httpRequestDef.build(session)
 
-      val httpRequestDef = HttpRequestDef("foo".expression, ahcRequest.expression, None, config)
-      val httpRequest = httpRequestDef.build(session)
+    httpRequest.get.config.silent shouldBe true
+  }
 
-      httpRequest.get.config.silent should beTrue
-    }
+  it should "build non-silent HttpRequest when being non-silent" in new Context {
+    val config = configBase.copy(silent = false)
 
-    "build non-silent HttpRequest when being non-silent" in new Context {
-      val config = HttpRequestConfig(
-        checks = Nil,
-        responseTransformer = None,
-        extraInfoExtractor = None,
-        maxRedirects = None,
-        throttled = false,
-        silent = false, // here
-        followRedirect = false,
-        protocol = HttpProtocol.DefaultHttpProtocol,
-        explicitResources = Nil)
+    val ahcRequest = mock[Request]
+    when(ahcRequest.getURI) thenReturn UriComponents.create("http://example.com/")
 
-      val ahcRequest = mock[Request]
-      ahcRequest.getURI returns UriComponents.create("http://example.com/")
+    val httpRequestDef = HttpRequestDef("foo".expression, ahcRequest.expression, None, config)
+    val httpRequest = httpRequestDef.build(session)
 
-      val httpRequestDef = HttpRequestDef("foo".expression, ahcRequest.expression, None, config)
-      val httpRequest = httpRequestDef.build(session)
+    httpRequest.get.config.silent shouldBe false
+  }
 
-      httpRequest.get.config.silent should beFalse
-    }
+  it should "build non-silent HttpRequest when passed a non-silent protocol" in new Context {
+    val ahcRequest = mock[Request]
+    when(ahcRequest.getURI) thenReturn UriComponents.create("http://example.com/test.js")
 
-    "build non-silent HttpRequest when passed a non-silent protocol" in new Context {
-      val ahcRequest = mock[Request]
-      ahcRequest.getURI returns UriComponents.create("http://example.com/test.js")
+    val protocol = new HttpProtocolBuilder(HttpProtocol.DefaultHttpProtocol).silentURI(".*js")
+    val config = configBase.copy(silent = false, protocol = protocol)
 
-      val protocol = new HttpProtocolBuilder(HttpProtocol.DefaultHttpProtocol).silentURI(".*js")
-      val config = HttpRequestConfig(
-        checks = Nil,
-        responseTransformer = None,
-        extraInfoExtractor = None,
-        maxRedirects = None,
-        throttled = false,
-        silent = false, // here
-        followRedirect = false,
-        protocol = protocol, // here
-        explicitResources = Nil)
+    val httpRequestDef = HttpRequestDef("foo".expression, ahcRequest.expression, None, config)
+    val httpRequest = httpRequestDef.build(session)
 
-      val httpRequestDef = HttpRequestDef("foo".expression, ahcRequest.expression, None, config)
-      val httpRequest = httpRequestDef.build(session)
-
-      httpRequest.get.config.silent should beTrue
-    }
+    httpRequest.get.config.silent shouldBe true
   }
 }

@@ -15,10 +15,9 @@
  */
 package io.gatling.recorder.har
 
-import scala.util.Try
+import org.threeten.bp.ZonedDateTime
 
-import org.joda.convert.StringConvert.{ INSTANCE => convertInstance }
-import org.joda.time.DateTime
+import scala.util.Try
 
 import io.gatling.recorder.util.Json
 import io.gatling.recorder.util.Json.{ JsonToInt, JsonToString }
@@ -27,11 +26,9 @@ object HarMapping {
 
   private val ProtectedValue = """"(.*)\"""".r
 
-  def jsonToHttpArchive(json: Json): HttpArchive =
-    HttpArchive(buildLog(json.log))
+  def jsonToHttpArchive(json: Json): HttpArchive = HttpArchive(buildLog(json.log))
 
-  private def parseMillisFromIso8601DateTime(time: String): Long =
-    convertInstance.convertFromString(classOf[DateTime], time).getMillis
+  private def parseMillisFromIso8601DateTime(time: String): Long = ZonedDateTime.parse(time).toInstant.toEpochMilli
 
   private def buildLog(log: Json): Log = {
     val entries = log.entries.iterator

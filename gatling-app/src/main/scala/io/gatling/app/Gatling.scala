@@ -17,6 +17,8 @@ package io.gatling.app
 
 import java.lang.System.currentTimeMillis
 
+import io.gatling.core.util.StringHelper
+
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.Try
@@ -82,6 +84,8 @@ object Gatling {
 class Gatling(simulationClass: Option[Class[Simulation]]) extends StrictLogging {
 
   def start: Int = {
+
+    StringHelper.checkSupportedJavaVersion()
 
       def defaultOutputDirectoryBaseName(clazz: Class[Simulation]) =
         configuration.core.outputDirectoryBaseName.getOrElse(clazz.getSimpleName.clean)
@@ -222,7 +226,7 @@ class Gatling(simulationClass: Option[Class[Simulation]]) extends StrictLogging 
                 case Some(clazz) =>
                   Selection(clazz, defaultOutputDirectoryBaseName(clazz), "")
                 case None =>
-                  throw new UnsupportedOperationException("Mute mode is currently uses by Gatling SBT plugin only.")
+                  throw new UnsupportedOperationException("Mute mode is currently used by Gatling SBT plugin only.")
               }
             else
               interactiveSelect(simulations)

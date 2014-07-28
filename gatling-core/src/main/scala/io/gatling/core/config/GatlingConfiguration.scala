@@ -34,7 +34,8 @@ import com.typesafe.scalalogging.slf4j.StrictLogging
 object GatlingConfiguration extends StrictLogging {
 
   // FIXME
-  var configuration: GatlingConfiguration = _
+  private var thisConfiguration: GatlingConfiguration = _
+  def configuration = thisConfiguration
 
   implicit class ConfigStringSeq(val string: String) extends AnyVal {
     def toStringList: List[String] = string.trim match {
@@ -43,11 +44,14 @@ object GatlingConfiguration extends StrictLogging {
     }
   }
 
-  def fakeConfig(props: Map[String, _ <: Any] = Map.empty) = {
+  private[gatling] def set(config: GatlingConfiguration): Unit = thisConfiguration = config
+
+  private[gatling] def setUpForTest(props: mutable.Map[String, _ <: Any] = mutable.Map.empty) = {
     val defaultsConfig = ConfigFactory.parseResources(getClass.getClassLoader, "gatling-defaults.conf")
-    val propertiesConfig = ConfigFactory.parseMap(props)
+    val propertiesConfig = ConfigFactory.parseMap(props + (data.Writers -> "")) // Disable DataWriters by default
     val config = configChain(ConfigFactory.systemProperties, propertiesConfig, defaultsConfig)
-    mapToGatlingConfig(config)
+    thisConfiguration = mapToGatlingConfig(config)
+    thisConfiguration
   }
 
   def setUp(props: mutable.Map[String, _ <: Any] = mutable.Map.empty) {
@@ -64,6 +68,7 @@ object GatlingConfiguration extends StrictLogging {
           "gatling.core.extract.xpath.namespaceAware",
           "gatling.core.extract.css.engine",
           "gatling.core.timeOut.actor",
+          "gatling.charting.statsTsvSeparator",
           "gatling.http.baseUrls",
           "gatling.http.proxy.host",
           "gatling.http.proxy.port",
@@ -101,7 +106,7 @@ object GatlingConfiguration extends StrictLogging {
 
     warnAboutRemovedProperties(config)
 
-    configuration = mapToGatlingConfig(config)
+    thisConfiguration = mapToGatlingConfig(config)
   }
 
   private def mapToGatlingConfig(config: Config) =
@@ -140,7 +145,6 @@ object GatlingConfiguration extends StrictLogging {
           jvmArgs = config.getString(core.zinc.JvmArgs).split(" "))),
       charting = ChartingConfiguration(
         noReports = config.getBoolean(charting.NoReports),
-        statsTsvSeparator = config.getString(charting.StatsTsvSeparator),
         maxPlotsPerSeries = config.getInt(charting.MaxPlotPerSeries),
         accuracy = config.getInt(charting.Accuracy),
         indicators = IndicatorsConfiguration(
@@ -217,7 +221,6 @@ object GatlingConfiguration extends StrictLogging {
           port = config.getInt(data.graphite.Port),
           protocol = config.getString(data.graphite.Protocol),
           rootPathPrefix = config.getString(data.graphite.RootPathPrefix),
-          maxMeasuredValue = config.getInt(data.graphite.MaxMeasuredValue),
           bufferSize = config.getInt(data.graphite.BufferSize)),
         jdbc = JDBCDataWriterConfiguration(
           db = DBConfiguration(
@@ -296,7 +299,6 @@ case class ZincConfiguration(
 
 case class ChartingConfiguration(
   noReports: Boolean,
-  statsTsvSeparator: String,
   maxPlotsPerSeries: Int,
   accuracy: Int,
   indicators: IndicatorsConfiguration)
@@ -394,7 +396,6 @@ case class GraphiteDataWriterConfiguration(
   port: Int,
   protocol: String,
   rootPathPrefix: String,
-  maxMeasuredValue: Int,
   bufferSize: Int)
 
 case class GatlingConfiguration(

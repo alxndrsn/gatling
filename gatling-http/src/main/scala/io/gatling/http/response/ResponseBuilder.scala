@@ -24,7 +24,7 @@ import scala.math.max
 import org.jboss.netty.buffer.ChannelBuffer
 
 import com.ning.http.client.{ FluentCaseInsensitiveStringsMap, HttpResponseBodyPart, HttpResponseHeaders, HttpResponseStatus, Request }
-import com.ning.http.client.providers.netty.response.ResponseBodyPart
+import com.ning.http.client.providers.netty.response.NettyResponseBodyPart
 import com.typesafe.scalalogging.slf4j.StrictLogging
 
 import io.gatling.core.config.GatlingConfiguration.configuration
@@ -33,7 +33,6 @@ import io.gatling.core.util.TimeHelper.nowMillis
 import io.gatling.http.HeaderNames
 import io.gatling.http.check.HttpCheck
 import io.gatling.http.check.checksum.ChecksumCheck
-import io.gatling.http.config.HttpProtocol
 import io.gatling.http.util.HttpHelper.{ isCss, isHtml, isTxt }
 
 object ResponseBuilder extends StrictLogging {
@@ -42,7 +41,10 @@ object ResponseBuilder extends StrictLogging {
 
   private val IsDebugEnabled = logger.underlying.isDebugEnabled
 
-  def newResponseBuilderFactory(checks: List[HttpCheck], responseTransformer: Option[PartialFunction[Response, Response]], protocol: HttpProtocol): Request => ResponseBuilder = {
+  def newResponseBuilderFactory(checks: List[HttpCheck],
+                                responseTransformer: Option[PartialFunction[Response, Response]],
+                                discardResponseChunks: Boolean,
+                                inferHtmlResources: Boolean): Request => ResponseBuilder = {
 
     val checksumChecks = checks.collect {
       case checksumCheck: ChecksumCheck => checksumCheck
@@ -50,9 +52,9 @@ object ResponseBuilder extends StrictLogging {
 
     val responseBodyUsageStrategies = checks.flatMap(_.responseBodyUsageStrategy).toSet
 
-    val storeBodyParts = IsDebugEnabled || !protocol.responsePart.discardResponseChunks || responseBodyUsageStrategies.nonEmpty
+    val storeBodyParts = IsDebugEnabled || !discardResponseChunks || responseBodyUsageStrategies.nonEmpty || responseTransformer.isDefined
 
-    request: Request => new ResponseBuilder(request, checksumChecks, responseBodyUsageStrategies, responseTransformer, storeBodyParts, protocol.responsePart.inferHtmlResources)
+    request: Request => new ResponseBuilder(request, checksumChecks, responseBodyUsageStrategies, responseTransformer, storeBodyParts, inferHtmlResources)
   }
 }
 
@@ -116,12 +118,13 @@ class ResponseBuilder(request: Request,
 
     updateLastByteReceived()
 
-    val channelBuffer = bodyPart.asInstanceOf[ResponseBodyPart].getChannelBuffer
+    val channelBuffer = bodyPart.asInstanceOf[NettyResponseBodyPart].getChannelBuffer
 
     if (storeBodyParts || storeHtmlOrCss)
       chunks += channelBuffer
 
     if (computeChecksums)
+      // FIXME use bodyPart.getBodyByteBuffer in 1.9.0-BETA6
       digests.values.foreach(_.update(channelBuffer.toByteBuffer))
   }
 

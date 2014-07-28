@@ -17,130 +17,117 @@ package io.gatling.core.check.extractor.jsonpath
 
 import java.nio.charset.StandardCharsets
 
-import io.gatling.core.json.Boon
-import org.junit.runner.RunWith
-import org.specs2.runner.JUnitRunner
+import org.scalatest.{ FlatSpec, Matchers }
 
 import io.gatling.core.config.GatlingConfiguration
-import io.gatling.core.test.ValidationSpecification
+import io.gatling.core.json.{ Jackson, Boon }
+import io.gatling.core.test.ValidationValues
 import io.gatling.core.util.IO._
 
-@RunWith(classOf[JUnitRunner])
-class JsonPathExtractorSpec extends ValidationSpecification {
+class JsonPathExtractorSpec extends FlatSpec with Matchers with ValidationValues {
 
-  GatlingConfiguration.setUp()
+  GatlingConfiguration.setUpForTest()
 
-  def prepared(file: String): Object = withCloseable(getClass.getResourceAsStream(file)) { is =>
+  def parseBoon(file: String): Object = withCloseable(getClass.getResourceAsStream(file)) { is =>
     val string = is.toString(StandardCharsets.UTF_8)
     Boon.parse(string)
   }
 
-  "count" should {
-
-      def count(path: String, file: String) = new CountJsonPathExtractor(path)(prepared(file))
-
-    "return expected result with anywhere expression" in {
-      count("$..author", "/test.json") must succeedWith(Some(4))
-    }
-
-    "return expected result with array expression" in {
-      count("$.store.book[2].author", "/test.json") must succeedWith(Some(1))
-    }
-
-    "return Some(0) when no results" in {
-      count("$.bar", "/test.json") must succeedWith(Some(0))
-    }
+  def parseJackson(file: String): Object = withCloseable(getClass.getResourceAsStream(file)) { is =>
+    val string = is.toString(StandardCharsets.UTF_8)
+    Jackson.parse(string)
   }
 
-  "extractSingle" should {
-
-      def extractSingle(path: String, occurrence: Int, file: String) = new SingleJsonPathExtractor[String](path, occurrence).apply(prepared(file))
-
-    "return expected result with anywhere expression and rank 0" in {
-      extractSingle("$..author", 0, "/test.json") must succeedWith(Some("Nigel Rees"))
-    }
-
-    "return expected result with anywhere expression and rank 1" in {
-      extractSingle("$..author", 1, "/test.json") must succeedWith(Some("Evelyn Waugh"))
-    }
-
-    "return expected result with array expression" in {
-      extractSingle("$.store.book[2].author", 0, "/test.json") must succeedWith(Some("Herman Melville"))
-    }
-
-    "return expected None with array expression" in {
-      extractSingle("$.store.book[2].author", 1, "/test.json") must succeedWith(None)
-    }
-
-    "return expected result with last function expression" in {
-      extractSingle("$.store.book[-1].title", 0, "/test.json") must succeedWith(Some("The Lord of the Rings"))
-    }
-
-    "not mess up if two nodes with the same name are placed in different locations" in {
-      extractSingle("$.foo", 0, "/test.json") must succeedWith(Some("bar"))
-    }
-
-    "support bracket notation" in {
-      extractSingle("$['@id']", 0, "/test.json") must succeedWith(Some("ID"))
-    }
-
-    "support element filter with object root" in {
-      extractSingle("$..book[?(@.category=='reference')].author", 0, "/test.json") must succeedWith(Some("Nigel Rees"))
-    }
-
-    "support element filter with array root" in {
-      extractSingle("$[?(@.id==19434)].foo", 0, "/test2.json") must succeedWith(Some("1"))
-    }
-
-    // $..[?()] is not a valid syntax
-    //		"support element filter with wildcard" in {
-    //			extractSingle("$..[?(@.id==19434)].foo", 0, "/test2.json") must succeedWith(Some("1"))
-    //		}
-
-    "support multiple element filters" in {
-      extractSingle("$[?(@.id==19434 && @.foo==1)].foo", 0, "/test2.json") must succeedWith(Some("1"))
-    }
-
-    "not try to be too smart and try funky stuff to parse dates" in {
-
-      val string = """{
-  "email":"bobby.tables@example.com"
-}"""
-
-      new SingleJsonPathExtractor[String]("$.email", 0).apply(Boon.parse(string)) must succeedWith(Some("bobby.tables@example.com"))
-    }
+  def testCount(path: String, file: String, expected: Int): Unit = {
+    new CountJsonPathExtractor(path)(parseBoon(file)).succeeded shouldBe Some(expected)
+    new CountJsonPathExtractor(path)(parseJackson(file)).succeeded shouldBe Some(expected)
+  }
+  def testSingle(path: String, occurrence: Int, file: String, expected: Option[String]): Unit = {
+    new SingleJsonPathExtractor[String](path, occurrence).apply(parseBoon(file)).succeeded shouldBe expected
+    new SingleJsonPathExtractor[String](path, occurrence).apply(parseJackson(file)).succeeded shouldBe expected
+  }
+  def testMultiple(path: String, file: String, expected: Option[List[String]]): Unit = {
+    new MultipleJsonPathExtractor[String](path).apply(parseBoon(file)).succeeded shouldBe expected
+    new MultipleJsonPathExtractor[String](path).apply(parseJackson(file)).succeeded shouldBe expected
   }
 
-  "extractMultiple" should {
+  "count" should "return expected result with anywhere expression" in {
+    testCount("$..author", "/test.json", 4)
+  }
 
-      def extractMultiple(path: String, file: String) = new MultipleJsonPathExtractor[String](path).apply(prepared(file))
+  it should "return expected result with array expression" in {
+    testCount("$.store.book[2].author", "/test.json", 1)
+  }
 
-    "return expected result with anywhere expression" in {
-      extractMultiple("$..author", "/test.json") must succeedWith(Some(List("Nigel Rees", "Evelyn Waugh", "Herman Melville", "J. R. R. Tolkien")))
-    }
+  it should "return Some(0) when no results" in {
+    testCount("$.bar", "/test.json", 0)
+  }
 
-    "return expected result with array expression" in {
-      extractMultiple("$.store.book[2].author", "/test.json") must succeedWith(Some(List("Herman Melville")))
-    }
+  "extractSingle" should "return expected result with anywhere expression and rank 0" in {
+    testSingle("$..author", 0, "/test.json", Some("Nigel Rees"))
+  }
 
-    "support wildcard at first level" in {
-      extractMultiple("$[*].id", "/test2.json") must succeedWith(Some(List("19434", "19435")))
-    }
+  it should "return expected result with anywhere expression and rank 1" in {
+    testSingle("$..author", 1, "/test.json", Some("Evelyn Waugh"))
+  }
 
-    "support wildcard at first level with multiple sublevels" in {
-      extractMultiple("$..owner.id", "/test2.json") must succeedWith(Some(List("18957", "18957")))
-    }
+  it should "return expected result with array expression" in {
+    testSingle("$.store.book[2].author", 0, "/test.json", Some("Herman Melville"))
+  }
 
-    "support wildcard at second level" in {
-      extractMultiple("$..store..category", "/test.json") must succeedWith(Some(List("reference", "fiction", "fiction", "fiction")))
-    }
+  it should "return expected None with array expression" in {
+    testSingle("$.store.book[2].author", 1, "/test.json", None)
+  }
 
-    "support array slicing" in {
-      extractMultiple("$.store.book[1:3].title", "/test.json") must succeedWith(Some(List("Sword of Honour", "Moby Dick")))
-    }
+  it should "return expected result with last function expression" in {
+    testSingle("$.store.book[-1].title", 0, "/test.json", Some("The Lord of the Rings"))
+  }
 
-    "support a step parameter in array slicing" in {
-      extractMultiple("$.store.book[::-2].title", "/test.json") must succeedWith(Some(List("The Lord of the Rings", "Sword of Honour")))
-    }
+  it should "not mess up if two nodes with the same name are placed in different locations" in {
+    testSingle("$.foo", 0, "/test.json", Some("bar"))
+  }
+
+  it should "support bracket notation" in {
+    testSingle("$['@id']", 0, "/test.json", Some("ID"))
+  }
+
+  it should "support element filter with object root" in {
+    testSingle("$..book[?(@.category=='reference')].author", 0, "/test.json", Some("Nigel Rees"))
+  }
+
+  it should "support element filter with array root" in {
+    testSingle("$[?(@.id==19434)].foo", 0, "/test2.json", Some("1"))
+  }
+
+  it should "support multiple element filters" in {
+    testSingle("$[?(@.id==19434 && @.foo==1)].foo", 0, "/test2.json", Some("1"))
+  }
+
+  "extractMultiple" should "return expected result with anywhere expression" in {
+    testMultiple("$..author", "/test.json", Some(List("Nigel Rees", "Evelyn Waugh", "Herman Melville", "J. R. R. Tolkien")))
+  }
+
+  it should "return expected result with array expression" in {
+    testMultiple("$.store.book[2].author", "/test.json", Some(List("Herman Melville")))
+  }
+
+  it should "support wildcard at first level" in {
+    testMultiple("$[*].id", "/test2.json", Some(List("19434", "19435")))
+  }
+
+  it should "support wildcard at first level with multiple sublevels" in {
+    testMultiple("$..owner.id", "/test2.json", Some(List("18957", "18957")))
+  }
+
+  it should "support wildcard at second level" in {
+    testMultiple("$..store..category", "/test.json", Some(List("reference", "fiction", "fiction", "fiction")))
+  }
+
+  it should "support array slicing" in {
+    testMultiple("$.store.book[1:3].title", "/test.json", Some(List("Sword of Honour", "Moby Dick")))
+  }
+
+  it should "support a step parameter in array slicing" in {
+    testMultiple("$.store.book[::-2].title", "/test.json", Some(List("The Lord of the Rings", "Sword of Honour")))
   }
 }

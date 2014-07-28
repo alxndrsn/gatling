@@ -64,7 +64,6 @@ object ConfigKeys {
 
   object charting {
     val NoReports = "gatling.charting.noReports"
-    val StatsTsvSeparator = "gatling.charting.statsTsvSeparator"
     val MaxPlotPerSeries = "gatling.charting.maxPlotPerSeries"
     val Accuracy = "gatling.charting.accuracy"
 
@@ -141,7 +140,6 @@ object ConfigKeys {
       val Port = "gatling.data.graphite.port"
       val Protocol = "gatling.data.graphite.protocol"
       val RootPathPrefix = "gatling.data.graphite.rootPathPrefix"
-      val MaxMeasuredValue = "gatling.data.graphite.maxMeasuredValue"
       val BufferSize = "gatling.data.graphite.bufferSize"
     }
     object jdbc {

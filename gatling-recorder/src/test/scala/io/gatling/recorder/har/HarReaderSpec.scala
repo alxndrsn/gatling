@@ -17,109 +17,110 @@ package io.gatling.recorder.har
 
 import scala.concurrent.duration.DurationInt
 
-import org.junit.runner.RunWith
-import org.specs2.mutable.Specification
-import org.specs2.runner.JUnitRunner
+import org.scalatest.{ FlatSpec, Matchers }
 
+import io.gatling.core.util.IO.withCloseable
 import io.gatling.recorder.config.ConfigKeys.http.InferHtmlResources
 import io.gatling.recorder.config.RecorderConfiguration.fakeConfig
 import io.gatling.recorder.scenario.{ PauseElement, RequestElement }
 
-@RunWith(classOf[JUnitRunner])
-class HarReaderSpec extends Specification {
+class HarReaderSpec extends FlatSpec with Matchers {
 
   def resourceAsStream(p: String) = getClass.getClassLoader.getResourceAsStream(p)
 
-  "HarReader" should {
+  val configWithResourcesFiltering = fakeConfig(Map(InferHtmlResources -> true))
 
-    val configWithResourcesFiltering = fakeConfig(Map(InferHtmlResources -> true))
+  // By default, we assume that we don't want to filter out the HTML resources
+  implicit val config = fakeConfig(Map(InferHtmlResources -> false))
 
-    // By default, we assume that we don't want to filter out the HTML resources
-    implicit val config = fakeConfig(Map(InferHtmlResources -> false))
+  "HarReader" should "work with empty JSON" in {
+    withCloseable(resourceAsStream("har/empty.har"))(HarReader(_) shouldBe empty)
+  }
 
-    "work with empty JSON" in {
-      HarReader(resourceAsStream("har/empty.har")) must beEmpty
-    }
+  val scn = withCloseable(resourceAsStream("har/www.kernel.org.har"))(HarReader(_))
 
-    val scn = HarReader(resourceAsStream("har/www.kernel.org.har"))
-    val elts = scn.elements
-    val pauseElts = elts.collect { case PauseElement(duration) => duration }
+  val elts = scn.elements
+  val pauseElts = elts.collect { case PauseElement(duration) => duration }
 
-    "return the correct number of Pause elements" in {
-      pauseElts.size must beLessThan(elts.size / 2)
-    }
+  it should "return the correct number of Pause elements" in {
+    pauseElts.size shouldBe <(elts.size / 2)
+  }
 
-    "return an appropriate pause duration" in {
-      val pauseDuration = pauseElts.reduce(_ + _)
+  it should "return an appropriate pause duration" in {
+    val pauseDuration = pauseElts.reduce(_ + _)
 
-      // The total duration of the HAR record is of 6454ms
-      (pauseDuration must beLessThanOrEqualTo(88389 milliseconds)) and
-        (pauseDuration must beGreaterThan(80000 milliseconds))
-    }
+    // The total duration of the HAR record is of 6454ms
+    pauseDuration shouldBe <=(88389 milliseconds)
+    pauseDuration shouldBe >(80000 milliseconds)
+  }
 
-    "return the appropriate request elements" in {
-      val (googleFontUris, uris) = elts
-        .collect { case req: RequestElement => req.uri }
-        .partition(_.contains("google"))
+  it should "return the appropriate request elements" in {
+    val (googleFontUris, uris) = elts
+      .collect { case req: RequestElement => req.uri }
+      .partition(_.contains("google"))
 
-      (uris must contain(startingWith("https://www.kernel.org")).forall) and
-        (uris.size must beEqualTo(41)) and
-        (googleFontUris.size must beEqualTo(16))
-    }
+    all(uris) should startWith("https://www.kernel.org")
+    uris.size shouldBe 41
+    googleFontUris.size shouldBe 16
+  }
 
-    "have the approriate first requests" in {
-      // The first element can't be a pause.
-      (elts.head must beAnInstanceOf[RequestElement]) and
-        (elts.head.asInstanceOf[RequestElement].uri must beEqualTo("https://www.kernel.org/")) and
-        (elts(1) must beAnInstanceOf[RequestElement]) and
-        (elts(1).asInstanceOf[RequestElement].uri must beEqualTo("https://www.kernel.org/theme/css/main.css"))
-    }
+  it should "have the approriate first requests" in {
+    // The first element can't be a pause.
+    elts.head shouldBe a[RequestElement]
+    elts.head.asInstanceOf[RequestElement].uri shouldBe "https://www.kernel.org/"
+    elts(1) shouldBe a[RequestElement]
+    elts(1).asInstanceOf[RequestElement].uri shouldBe "https://www.kernel.org/theme/css/main.css"
+  }
 
-    "have the headers correctly set" in {
-      val el0 = elts.head.asInstanceOf[RequestElement]
-      val el1 = elts(1).asInstanceOf[RequestElement]
+  it should "have the headers correctly set" in {
+    val el0 = elts.head.asInstanceOf[RequestElement]
+    val el1 = elts(1).asInstanceOf[RequestElement]
 
-      (el0.headers must beEmpty) and
-        (el1.headers must not beEmpty) and
-        (el1.headers must haveKeys("User-Agent", "Host", "Accept-Encoding", "Accept-Language"))
-    }
+    val a = el0.headers shouldBe empty
+    el1.headers should not be empty
+    for {
+      header <- List("User-Agent", "Host", "Accept-Encoding", "Accept-Language")
+    } el1.headers should contain key header
+  }
 
-    "have requests with valid headers" in {
-      // Extra headers can be added by Chrome
-      val headerNames = elts.iterator.collect { case req: RequestElement => req.headers.keys }.flatten.toSet
-      headerNames must not containPattern ":.*"
-    }
+  it should "have requests with valid headers" in {
+    // Extra headers can be added by Chrome
+    val headerNames = elts.iterator.collect { case req: RequestElement => req.headers.keys }.flatten.toSet
+    all(headerNames) should not include regex(":.*")
+  }
 
-    "have the embedded HTML resources filtered out" in {
-      val scn2 = HarReader(resourceAsStream("har/www.kernel.org.har"))(configWithResourcesFiltering)
-      val elts2 = scn2.elements
-      elts2.size must beLessThan(elts.size) and
-        (elts2 must contain("https://www.kernel.org/theme/css/main.css") not)
-    }
+  it should "have the embedded HTML resources filtered out" in {
+    val scn2 = HarReader(resourceAsStream("har/www.kernel.org.har"))(configWithResourcesFiltering)
+    val elts2 = scn2.elements
+    elts2.size shouldBe <(elts.size)
+    elts2 should not contain "https://www.kernel.org/theme/css/main.css"
+  }
 
-    "deal correctly with file having a websockets record" in {
-      val scn = HarReader(resourceAsStream("har/play-chat.har"))(configWithResourcesFiltering)
+  it should "deal correctly with file having a websockets record" in {
+    withCloseable(resourceAsStream("har/play-chat.har")) { is =>
+      val scn = HarReader(is)(configWithResourcesFiltering)
       val requests = scn.elements.collect { case req: RequestElement => req.uri }
 
-      (scn.elements must have size 3) and
-        (requests must beEqualTo(List("http://localhost:9000/room", "http://localhost:9000/room?username=robert")))
-    }
-
-    "deal correctly with HTTP CONNECT requests" in {
-      val scn = HarReader(resourceAsStream("har/charles_https.har"))
-
-      scn.elements must beEmpty
-    }
-
-    "deal correctly with HTTP requests having a status=0" in {
-      val scn = HarReader(resourceAsStream("har/null_status.har"))
-      val requests = scn.elements.collect { case req: RequestElement => req }
-      val statuses = requests.map(_.statusCode)
-
-      requests must have size 3 and (statuses must not contain 0)
+      scn.elements should have size 3
+      requests shouldBe List("http://localhost:9000/room", "http://localhost:9000/room?username=robert")
     }
   }
 
-  // Deactivate Specs2 implicit to be able to use the ones provided in scala.concurrent.duration
-  override def intToRichLong(v: Int) = super.intToRichLong(v)
+  it should "deal correctly with HTTP CONNECT requests" in {
+    withCloseable(resourceAsStream("har/charles_https.har")) { is =>
+      val scn = HarReader(is)
+      scn.elements shouldBe empty
+    }
+  }
+
+  it should "deal correctly with HTTP requests having a status=0" in {
+    withCloseable(resourceAsStream("har/null_status.har")) { is =>
+      val scn = HarReader(is)
+      val requests = scn.elements.collect { case req: RequestElement => req }
+      val statuses = requests.map(_.statusCode)
+
+      requests should have size 3
+      statuses should not contain 0
+    }
+  }
 }

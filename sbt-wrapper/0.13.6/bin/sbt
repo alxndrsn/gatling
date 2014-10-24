@@ -3,4 +3,4 @@ if [ -f "$HOME/.sbtconfig" ]; then
   echo "Use of ~/.sbtconfig is deprecated, please migrate global settings to /usr/local/etc/sbtopts" >&2
   . "$HOME/.sbtconfig"
 fi
-exec "/usr/local/Cellar/sbt/0.13.6/libexec/sbt" "$@"
+exec "../libexec/sbt" "$@"

@@ -44,7 +44,6 @@ case class HttpRequestConfig(
   maxRedirects: Option[Int],
   throttled: Boolean,
   silent: Option[Boolean],
-  skipRequest: Option[Boolean],
   followRedirect: Boolean,
   discardResponseChunks: Boolean,
   protocol: HttpProtocol,

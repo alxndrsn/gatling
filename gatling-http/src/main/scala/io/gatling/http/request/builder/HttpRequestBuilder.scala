@@ -29,7 +29,6 @@ case class HttpAttributes(
   checks: List[HttpCheck] = Nil,
   ignoreDefaultChecks: Boolean = false,
   silent: Option[Boolean] = None,
-  skipRequest: Option[Boolean] = None,
   followRedirect: Boolean = true,
   discardResponseChunks: Boolean = true,
   responseTransformer: Option[PartialFunction[Response, Response]] = None,
@@ -71,8 +70,6 @@ abstract class AbstractHttpRequestBuilder[B <: AbstractHttpRequestBuilder[B]](co
   def silent: B = newInstance(httpAttributes.copy(silent = Some(true)))
 
   def notSilent: B = newInstance(httpAttributes.copy(silent = Some(false)))
-
-  def skipRequest: B = newInstance(httpAttributes.copy(skipRequest = Some(true)))
 
   def disableFollowRedirect: B = newInstance(httpAttributes.copy(followRedirect = false))
 
@@ -139,7 +136,6 @@ abstract class AbstractHttpRequestBuilder[B <: AbstractHttpRequestBuilder[B]](co
         maxRedirects = protocol.responsePart.maxRedirects,
         throttled = throttled,
         silent = httpAttributes.silent,
-        skipRequest = httpAttributes.skipRequest,
         followRedirect = resolvedFollowRedirect,
         discardResponseChunks = resolvedDiscardResponseChunks,
         protocol = protocol,
